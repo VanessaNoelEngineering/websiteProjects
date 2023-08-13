@@ -1,0 +1,143 @@
+#include "Wire.h"       
+#include "I2Cdev.h"   
+#include "MPU6050.h" 
+#include <LiquidCrystal.h>
+
+//defining maximum change in x, y, and z allowed before buzzer goes off:
+#define samples 100 
+#define maxVal 25
+#define minVal -25
+
+//Defining button pin:
+#define buttonPin 7
+
+//setting calibration variables:
+int xVal = 0;
+int yVal = 0;
+int zVal = 0;
+
+//LCD setup"
+const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
+
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+//MPU6050 setup
+MPU6050 mpu;
+int16_t ax, ay, az;
+int16_t gx, gy, gz;
+
+struct MyData {
+  byte X;
+  byte Y;
+  byte Z;
+};
+
+MyData data;
+
+//setting up buzzer;
+const int buzzer = 9; 
+
+//Making variable to track how many times buzzer went off:
+int count = 0;
+
+//LED pin:
+#define LED 13
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+
+  //MPU init:
+  mpu.initialize();
+
+  //LCD setup:
+  lcd.begin(16, 2);
+
+  //setting buzzer as output:
+  pinMode(buzzer, OUTPUT); // Set buzzer - pin 9 as an output
+
+  //Setting up button:
+  pinMode(buttonPin, INPUT_PULLUP);
+
+  //Calibration:
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  data.X = map(ax, -17000, 17000, 0, 255 ); // X axis data
+  data.Y = map(ay, -17000, 17000, 0, 255);  // Y axis data
+  data.Z = map(az, -17000, 17000, 0, 255);  // Z axis data
+
+  for(int i = 0; i<samples; i++){
+    xVal += data.X;
+    yVal += data.Y;
+    zVal += data.Z;
+}
+  //calculating average value:
+  xVal /= samples;
+  yVal /= samples;
+  zVal /= samples;
+
+  //delaying for 3 seconds to ensure data actually collected:
+  delay(3000);
+
+  //displaying calibration confrimation:
+  lcd.clear();
+  lcd.print("Calibrated");
+  delay(1000);
+  lcd.clear();
+
+  pinMode(LED,OUTPUT);
+}
+void loop() {
+  // put your main code here, to run repeatedly:
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  data.X = map(ax, -17000, 17000, 0, 255 ); // X axis data
+  data.Y = map(ay, -17000, 17000, 0, 255);  // Y axis data
+  data.Z = map(az, -17000, 17000, 0, 255);  // Z axis data
+
+  Serial.println(data.Z);
+
+  //Text setup:
+  lcd.setCursor(0, 0);
+  lcd.print("RAW:");
+
+  lcd.setCursor(0,1);
+  lcd.print("DIFF:");
+
+  //Raw X data:
+  String xString = "X:";
+  int xData = data.X;
+  String xRawPrint = xString + xData;
+  lcd.setCursor(4,0);
+  lcd.print(xRawPrint);
+
+  //Difference in X values (average - raw = difference):
+  int xDiff = xVal - xData;
+  String xDiffPrint = xString + xDiff;
+  lcd.setCursor(5,1);
+  lcd.print(xDiffPrint);
+
+
+  //Raw Y data:
+  String yString = "Y:";
+  int yData = data.Y;
+  String yRawPrint = yString + yData;
+  lcd.setCursor(10,0);
+  lcd.print(yRawPrint);
+
+  //Difference in Y values (average - raw = difference):
+  int yDiff = yVal - yData;
+  String yDiffPrint = yString + yDiff;
+  lcd.setCursor(11,1);
+  lcd.print(yDiffPrint);
+
+  //If the difference in average and raw values is larger than the max or smaller than min, play sound:
+  if (xDiff < minVal || xDiff > maxVal || yDiff < minVal || yDiff > maxVal){
+    tone(buzzer, 1000);
+    digitalWrite(LED,HIGH);
+  }
+  else{
+    //Stop sound
+    digitalWrite(LED,LOW);
+    noTone(buzzer);
+  }
+
+}
